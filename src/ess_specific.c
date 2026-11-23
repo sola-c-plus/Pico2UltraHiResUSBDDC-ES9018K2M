@@ -39,6 +39,38 @@ void ess_dac_i2c_setup(void)
 		sleep_ms(1);
 	}
 
+	else if (KIND_ESS_DAC == ES9018K2M)
+	{
+		// TODO: フェーズ2で384kHz超対応を追加する(Resister #21 OSFバイパス)
+
+		// ソフトスタート設定
+		i2cbuf[0] = 0x0E; // Resister #14 Soft Start Configuration
+		i2cbuf[1] = 0x8A; //
+		i2c_write_blocking(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 2, true);
+		sleep_ms(1);
+
+		// DPLLバンド幅設定(ジッタが多いので少し広めに、ES9010K2M分岐に倣う)
+		i2cbuf[0] = 0x0C; // Resister 12
+		i2cbuf[1] = 0xC8; // default 0x5A
+		i2c_write_blocking(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 2, true);
+		sleep_ms(1);
+
+		// stop_div設定(ES9038Q2MのLOCK SPEEDとは意味が異なり、FSR>96kHzでは0が必須)
+		i2cbuf[0] = 0x0A; // Resister 10
+		i2cbuf[1] = 0x00; // stop_div=0
+		i2c_write_blocking(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 2, true);
+		sleep_ms(1);
+
+		// ボリュームを最大にしておく
+		i2cbuf[0] = 0x0F; // Resister #15 Volume Control ch1
+		i2cbuf[1] = 0x00; // 最大ボリューム
+		i2c_write_blocking(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 2, true);
+		i2cbuf[0] = 0x10; // Resister #16 Volume Control ch2
+		i2cbuf[1] = 0x00; // 最大ボリューム
+		i2c_write_blocking(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 2, true);
+		sleep_ms(1);
+	}
+
 	else if (KIND_ESS_DAC == ES9038Q2M)
 	{
 		// MCLK設定
@@ -583,6 +615,16 @@ void ess_dac_volume(void)
 				i2c_ringbuf_set_data(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 5, false, &i2c_rb_buf);
 				i2c_ringbuf_write(&i2c_rb_buf, &i2c_ringbuffer0);
 			}
+		}
+		else if (KIND_ESS_DAC == ES9018K2M)
+		{
+			float vol_dB_2 = -saturation_f32((float)audio_state.acq_volume / 128.0, 0.0, -256.0);
+			i2cbuf[0] = 0x0F; // Resister #15 volume1
+			i2cbuf[1] = (uint8_t)vol_dB_2;
+			i2cbuf[2] = (uint8_t)vol_dB_2;
+
+			i2c_ringbuf_set_data(I2C_PORT, I2C_ESS_DAC_ADDR >> 1, i2cbuf, 3, false, &i2c_rb_buf);
+			i2c_ringbuf_write(&i2c_rb_buf, &i2c_ringbuffer0);
 		}
 		else if (KIND_ESS_DAC == ES9039Q2M)
 		{
